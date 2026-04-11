@@ -13,6 +13,9 @@ on:
         required: true
         default: 'v1.0.0'
 
+permissions:
+  contents: write
+
 jobs:
   build-macos:
     name: Build macOS Application
@@ -91,14 +94,11 @@ jobs:
 
       - name: Upload to Release (if release event)
         if: github.event_name == 'release'
-        uses: actions/upload-release-asset@v1
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/PDF-to-Excel-Converter-macOS.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: dist/PDF-to-Excel-Converter-macOS.zip
-          asset_name: PDF-to-Excel-Converter-macOS.zip
-          asset_content_type: application/zip
 
   build-windows:
     name: Build Windows Application
@@ -175,14 +175,11 @@ jobs:
 
       - name: Upload to Release (if release event)
         if: github.event_name == 'release'
-        uses: actions/upload-release-asset@v1
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/PDF-to-Excel-Converter-Windows.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: dist/PDF-to-Excel-Converter-Windows.zip
-          asset_name: PDF-to-Excel-Converter-Windows.zip
-          asset_content_type: application/zip
 
   summary:
     name: Build Summary
