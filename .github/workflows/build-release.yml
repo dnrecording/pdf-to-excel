@@ -45,10 +45,26 @@ jobs:
           ls -l $(which tesseract)
           echo ""
           echo "Tessdata directory:"
-          ls -la /usr/local/share/tessdata/ 2>/dev/null || ls -la /opt/homebrew/share/tessdata/ 2>/dev/null
+          ls -la /usr/local/share/tessdata/ 2>/dev/null || ls -la /opt/homebrew/share/tessdata/ 2>/dev/null || true
           echo ""
-          echo "Thai and English data:"
-          find /usr/local/share/tessdata /opt/homebrew/share/tessdata -name "tha.traineddata" -o -name "eng.traineddata" 2>/dev/null
+          echo "Checking for Thai and English language data..."
+          if [ -f /opt/homebrew/share/tessdata/tha.traineddata ]; then
+            echo "✅ Thai: /opt/homebrew/share/tessdata/tha.traineddata"
+          elif [ -f /usr/local/share/tessdata/tha.traineddata ]; then
+            echo "✅ Thai: /usr/local/share/tessdata/tha.traineddata"
+          else
+            echo "❌ Thai language data not found"
+            exit 1
+          fi
+
+          if [ -f /opt/homebrew/share/tessdata/eng.traineddata ]; then
+            echo "✅ English: /opt/homebrew/share/tessdata/eng.traineddata"
+          elif [ -f /usr/local/share/tessdata/eng.traineddata ]; then
+            echo "✅ English: /usr/local/share/tessdata/eng.traineddata"
+          else
+            echo "❌ English language data not found"
+            exit 1
+          fi
 
       - name: Build application
         run: |
@@ -99,15 +115,13 @@ jobs:
 
       - name: Install Tesseract OCR
         run: |
-          # Download Tesseract installer
-          $tesseractUrl = "https://github.com/UB-Mannheim/tesseract/releases/download/v5.5.0/tesseract-ocr-w64-setup-5.5.0.20250129.exe"
-          $installerPath = "$env:TEMP\tesseract-installer.exe"
+          Write-Host "Installing Tesseract via Chocolatey..."
+          choco install tesseract --version=5.3.3 -y --no-progress
 
-          Write-Host "Downloading Tesseract..."
-          Invoke-WebRequest -Uri $tesseractUrl -OutFile $installerPath
-
-          Write-Host "Installing Tesseract..."
-          Start-Process -FilePath $installerPath -ArgumentList "/S", "/D=C:\Program Files\Tesseract-OCR" -Wait
+          Write-Host "Installing Thai language data..."
+          $tessdata = "C:\Program Files\Tesseract-OCR\tessdata"
+          $thaiUrl = "https://github.com/tesseract-ocr/tessdata/raw/main/tha.traineddata"
+          Invoke-WebRequest -Uri $thaiUrl -OutFile "$tessdata\tha.traineddata"
 
           # Add to PATH
           $env:Path += ";C:\Program Files\Tesseract-OCR"

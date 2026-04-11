@@ -230,8 +230,8 @@ def _browse_file(self):
 - **Fix:** Use runtime hook to set paths from `sys._MEIPASS`
 
 **Issue:** GitHub Actions build fails on Windows
-- **Cause:** Tesseract installer URL changed or PATH not set
-- **Fix:** Update URL in workflow, ensure PATH includes Tesseract directory
+- **Cause:** Tesseract installation failed
+- **Fix:** Workflow uses Chocolatey package manager (reliable and pre-installed on GitHub Actions runners). If Thai language download fails, update tessdata URL in workflow.
 
 ## Testing Strategy
 
@@ -335,7 +335,8 @@ if getattr(sys, 'frozen', False):
    - Upload to GitHub Release
 
 2. **Windows job** (runs on `windows-latest`):
-   - Download and install Tesseract silently
+   - Install Tesseract via Chocolatey (reliable package manager)
+   - Download Thai language data from tessdata repository
    - Install Python dependencies
    - Run PyInstaller
    - Create `PDF-to-Excel-Converter-Windows.zip`
