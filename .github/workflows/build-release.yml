@@ -1,0 +1,180 @@
+name: Build Standalone Applications
+
+on:
+  # Trigger on release creation
+  release:
+    types: [created]
+
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+jobs:
+  build-macos:
+    name: Build macOS Application
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Install Tesseract OCR
+        run: |
+          brew install tesseract tesseract-lang
+          tesseract --version
+          tesseract --list-langs | grep -E "(tha|eng)"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-build.txt
+
+      - name: Verify Tesseract paths
+        run: |
+          echo "Tesseract binary:"
+          which tesseract
+          ls -l $(which tesseract)
+          echo ""
+          echo "Tessdata directory:"
+          ls -la /usr/local/share/tessdata/ 2>/dev/null || ls -la /opt/homebrew/share/tessdata/ 2>/dev/null
+          echo ""
+          echo "Thai and English data:"
+          find /usr/local/share/tessdata /opt/homebrew/share/tessdata -name "tha.traineddata" -o -name "eng.traineddata" 2>/dev/null
+
+      - name: Build application
+        run: |
+          pyinstaller pdf-to-excel.spec
+          ls -lh "dist/PDF to Excel Converter.app"
+
+      - name: Test bundled app
+        run: |
+          python test_bundle.py
+
+      - name: Create zip archive
+        run: |
+          cd dist
+          zip -r "PDF-to-Excel-Converter-macOS.zip" "PDF to Excel Converter.app"
+          cd ..
+          ls -lh "dist/PDF-to-Excel-Converter-macOS.zip"
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-app
+          path: dist/PDF-to-Excel-Converter-macOS.zip
+          retention-days: 30
+
+      - name: Upload to Release (if release event)
+        if: github.event_name == 'release'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: dist/PDF-to-Excel-Converter-macOS.zip
+          asset_name: PDF-to-Excel-Converter-macOS.zip
+          asset_content_type: application/zip
+
+  build-windows:
+    name: Build Windows Application
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Install Tesseract OCR
+        run: |
+          # Download Tesseract installer
+          $tesseractUrl = "https://github.com/UB-Mannheim/tesseract/releases/download/v5.5.0/tesseract-ocr-w64-setup-5.5.0.20250129.exe"
+          $installerPath = "$env:TEMP\tesseract-installer.exe"
+
+          Write-Host "Downloading Tesseract..."
+          Invoke-WebRequest -Uri $tesseractUrl -OutFile $installerPath
+
+          Write-Host "Installing Tesseract..."
+          Start-Process -FilePath $installerPath -ArgumentList "/S", "/D=C:\Program Files\Tesseract-OCR" -Wait
+
+          # Add to PATH
+          $env:Path += ";C:\Program Files\Tesseract-OCR"
+          [Environment]::SetEnvironmentVariable("Path", $env:Path, [System.EnvironmentVariableTarget]::Process)
+
+          Write-Host "Verifying installation..."
+          & "C:\Program Files\Tesseract-OCR\tesseract.exe" --version
+          & "C:\Program Files\Tesseract-OCR\tesseract.exe" --list-langs
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-build.txt
+
+      - name: Verify Tesseract paths
+        run: |
+          Write-Host "Tesseract binary:"
+          Get-Command tesseract -ErrorAction SilentlyContinue
+          Test-Path "C:\Program Files\Tesseract-OCR\tesseract.exe"
+
+          Write-Host "`nTessdata directory:"
+          Get-ChildItem "C:\Program Files\Tesseract-OCR\tessdata\" -Filter "*.traineddata"
+
+      - name: Build application
+        run: |
+          pyinstaller pdf-to-excel.spec
+          Get-ChildItem "dist\PDF to Excel Converter" -Recurse
+
+      - name: Create zip archive
+        run: |
+          cd dist
+          Compress-Archive -Path "PDF to Excel Converter" -DestinationPath "PDF-to-Excel-Converter-Windows.zip"
+          cd ..
+          Get-Item "dist\PDF-to-Excel-Converter-Windows.zip" | Select-Object Name, Length
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-app
+          path: dist/PDF-to-Excel-Converter-Windows.zip
+          retention-days: 30
+
+      - name: Upload to Release (if release event)
+        if: github.event_name == 'release'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: dist/PDF-to-Excel-Converter-Windows.zip
+          asset_name: PDF-to-Excel-Converter-Windows.zip
+          asset_content_type: application/zip
+
+  summary:
+    name: Build Summary
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Display artifact info
+        run: |
+          echo "✅ Build completed successfully!"
+          echo ""
+          echo "📦 Artifacts created:"
+          ls -lh */*.zip
+          echo ""
+          echo "🎯 Applications ready for distribution"

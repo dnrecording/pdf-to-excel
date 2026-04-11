@@ -1,0 +1,5 @@
+# Build dependencies for creating standalone applications
+-r requirements.txt
+
+# Packaging tools
+pyinstaller>=6.0.0

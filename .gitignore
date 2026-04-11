@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+*.pyc
+.flake8
+mypy.ini
+pytest.ini
+
+# PyInstaller
+*.spec.bak
+*.manifest
+*.exe.log
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Output files
+output/
+*.xlsx
+test_output/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Keep test PDFs but ignore generated ones
+*.pdf
+/spec
+.claude
