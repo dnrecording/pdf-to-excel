@@ -96,6 +96,9 @@ PDF → pdf2image → Tesseract OCR → Table Parser → Excel Writer
 - Raw 300 DPI images work best
 - Thai Unicode range: `\u0E00` to `\u0E7F`
 - Thai fonts need 1.5x width multiplier in Excel
+- **CRITICAL**: Use `tessdata_best` for Thai language data (not `tessdata` or `tessdata_fast`)
+  - `tessdata` adds spaces between Thai characters and reduces column detection accuracy
+  - `tessdata_best` properly recognizes Thai characters without spacing issues
 
 **OCR Configuration:**
 - Default settings work best: `--oem 3 --psm 6`
@@ -249,6 +252,11 @@ def _browse_file(self):
   - Extractor explicitly passes poppler_path to convert_from_path when running as frozen app
   - Workflow installs poppler on both macOS and Windows
   - Added debug output to diagnose bundling issues
+
+**Issue:** Windows OCR adds spaces between Thai characters and fails to detect columns
+- **Symptom:** "บ ร ิ ษั ท" instead of "บริษัท", all content in one column instead of multiple
+- **Cause:** Using standard `tessdata` instead of `tessdata_best` for Thai language
+- **Fix:** Download Thai language data from `tessdata_best` repository for better character recognition quality
 
 ## Testing Strategy
 

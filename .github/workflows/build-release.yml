@@ -125,16 +125,23 @@ jobs:
           Write-Host "Waiting for installation to complete..."
           Start-Sleep -Seconds 5
 
-          Write-Host "Installing Thai language data..."
+          Write-Host "Installing Thai language data (best quality for better Thai recognition)..."
           $tessdata = "C:\Program Files\Tesseract-OCR\tessdata"
           if (-Not (Test-Path $tessdata)) {
             Write-Host "Creating tessdata directory..."
             New-Item -ItemType Directory -Force -Path $tessdata
           }
 
-          $thaiUrl = "https://github.com/tesseract-ocr/tessdata/raw/main/tha.traineddata"
-          Write-Host "Downloading Thai language data..."
+          # Use tessdata_best for better Thai character recognition
+          $thaiUrl = "https://github.com/tesseract-ocr/tessdata_best/raw/main/tha.traineddata"
+          Write-Host "Downloading Thai language data (best quality)..."
           Invoke-WebRequest -Uri $thaiUrl -OutFile "$tessdata\tha.traineddata"
+
+          Write-Host "Verifying Thai language file..."
+          if (Test-Path "$tessdata\tha.traineddata") {
+            $fileSize = (Get-Item "$tessdata\tha.traineddata").Length / 1MB
+            Write-Host "Thai language file size: $([math]::Round($fileSize, 2)) MB"
+          }
 
           # Add to PATH
           $env:Path += ";C:\Program Files\Tesseract-OCR"
