@@ -19,15 +19,19 @@ block_cipher = None
 if sys.platform == 'darwin':  # macOS
     TESSERACT_BIN = '/opt/homebrew/bin/tesseract'
     TESSDATA_DIR = '/opt/homebrew/share/tessdata'
-    POPPLER_DIR = None  # macOS: poppler comes with Homebrew, in PATH
+    # Poppler binaries on macOS (Homebrew)
+    POPPLER_DIR = '/opt/homebrew/bin'
+    POPPLER_BINS = ['pdftoppm', 'pdftocairo', 'pdfinfo']
 elif sys.platform == 'win32':  # Windows
     TESSERACT_BIN = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
     TESSDATA_DIR = r'C:\Program Files\Tesseract-OCR\tessdata'
     POPPLER_DIR = r'C:\poppler\Library\bin'  # Poppler binaries for Windows
+    POPPLER_BINS = None  # Bundle all .exe and .dll files
 else:  # Linux
     TESSERACT_BIN = '/usr/bin/tesseract'
     TESSDATA_DIR = '/usr/share/tesseract-ocr/4.00/tessdata'
-    POPPLER_DIR = None  # Linux: poppler in PATH
+    POPPLER_DIR = '/usr/bin'
+    POPPLER_BINS = ['pdftoppm', 'pdftocairo', 'pdfinfo']
 
 # Data files to bundle
 datas = []
@@ -49,12 +53,20 @@ if os.path.exists(TESSDATA_DIR):
             else:
                 datas.append((lang_file, 'tesseract/tessdata'))
 
-# Bundle Poppler binaries (Windows only)
+# Bundle Poppler binaries
 if POPPLER_DIR and os.path.exists(POPPLER_DIR):
-    for file in os.listdir(POPPLER_DIR):
-        if file.endswith(('.exe', '.dll')):
-            file_path = os.path.join(POPPLER_DIR, file)
-            datas.append((file_path, 'poppler/bin'))
+    if POPPLER_BINS:
+        # macOS/Linux: bundle specific binaries
+        for bin_name in POPPLER_BINS:
+            bin_path = os.path.join(POPPLER_DIR, bin_name)
+            if os.path.exists(bin_path):
+                datas.append((bin_path, 'poppler/bin'))
+    else:
+        # Windows: bundle all .exe and .dll files
+        for file in os.listdir(POPPLER_DIR):
+            if file.endswith(('.exe', '.dll')):
+                file_path = os.path.join(POPPLER_DIR, file)
+                datas.append((file_path, 'poppler/bin'))
 
 # Hidden imports that PyInstaller might miss
 hiddenimports = [

@@ -30,11 +30,15 @@ jobs:
         with:
           python-version: '3.9'
 
-      - name: Install Tesseract OCR
+      - name: Install Tesseract OCR and Poppler
         run: |
-          brew install tesseract tesseract-lang
+          brew install tesseract tesseract-lang poppler
           tesseract --version
           tesseract --list-langs | grep -E "(tha|eng)"
+
+          echo "Verifying Poppler installation..."
+          which pdftoppm
+          pdftoppm -v
 
       - name: Install Python dependencies
         run: |

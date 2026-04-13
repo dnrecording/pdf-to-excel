@@ -29,10 +29,9 @@ if getattr(sys, 'frozen', False):
     print(f"Configured Tesseract: {tesseract_cmd}")
     print(f"Tessdata directory: {tessdata_dir}")
 
-    # Configure Poppler for pdf2image (Windows only)
-    if sys.platform == 'win32':
-        poppler_path = os.path.join(bundle_dir, 'poppler', 'bin')
-        if os.path.exists(poppler_path):
-            # Add poppler to PATH so pdf2image can find it
-            os.environ['PATH'] = poppler_path + os.pathsep + os.environ.get('PATH', '')
-            print(f"Configured Poppler: {poppler_path}")
+    # Configure Poppler for pdf2image (all platforms)
+    poppler_path = os.path.join(bundle_dir, 'poppler', 'bin')
+    if os.path.exists(poppler_path):
+        # Add poppler to PATH so pdf2image can find it
+        os.environ['PATH'] = poppler_path + os.pathsep + os.environ.get('PATH', '')
+        print(f"Configured Poppler: {poppler_path}")

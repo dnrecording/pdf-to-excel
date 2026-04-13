@@ -62,7 +62,8 @@ PDF → pdf2image → Tesseract OCR → Table Parser → Excel Writer
 ```
 
 1. **extractor.py** (`OCRExtractor`):
-   - Converts PDF pages to images (300 DPI)
+   - Converts PDF pages to images (300 DPI) using pdf2image
+   - **Critical:** Explicitly passes poppler_path to convert_from_path when running as bundled app
    - Runs Tesseract OCR with Thai+English
    - Parses table structure from OCR text using regex (splits on 2+ spaces/tabs)
    - **Critical:** Uses OCR mode 3 (default) and PSM mode 6 (table)
@@ -203,12 +204,15 @@ def _browse_file(self):
 - `pandas` - DataFrame operations
 - `openpyxl` - Excel file generation
 
-**System Requirements:**
+**System Requirements (for development):**
 - Tesseract OCR with Thai language pack (`tesseract-lang`)
 - Poppler (for pdf2image):
-  - macOS: `brew install poppler` (comes with Homebrew tesseract)
-  - Windows: Bundled in standalone app (from poppler-windows releases)
+  - macOS: `brew install poppler`
+  - Windows: Install from poppler-windows releases or via package manager
   - Linux: `sudo apt-get install poppler-utils`
+
+**Standalone app (end users):**
+- Both Tesseract and Poppler are bundled - no installation required
 
 ## Common Issues & Solutions
 
@@ -236,9 +240,13 @@ def _browse_file(self):
 - **Cause:** Tesseract installation failed
 - **Fix:** Workflow uses Chocolatey package manager (reliable and pre-installed on GitHub Actions runners). If Thai language download fails, update tessdata URL in workflow.
 
-**Issue:** Windows app fails with "Unable to get page count. Is poppler installed?"
-- **Cause:** Poppler is not bundled in Windows build
-- **Fix:** Workflow downloads poppler, spec file bundles it, runtime hook adds it to PATH
+**Issue:** App fails with "Unable to get page count. Is poppler installed?" (both macOS and Windows)
+- **Cause:** Poppler binaries not bundled or not found in bundled app
+- **Fix:**
+  - Spec file bundles poppler binaries for all platforms
+  - Runtime hook adds poppler to PATH
+  - Extractor explicitly passes poppler_path to convert_from_path when running as frozen app
+  - Workflow installs poppler on both macOS and Windows
 
 ## Testing Strategy
 
@@ -265,7 +273,7 @@ The project packages as standalone applications that bundle:
 - Python interpreter and all dependencies
 - Tesseract OCR binary
 - Thai and English language data files
-- Poppler binaries (Windows only - for PDF to image conversion)
+- Poppler binaries (for PDF to image conversion - all platforms)
 - Application code
 
 **Platform-specific builds:**
@@ -281,22 +289,32 @@ The project packages as standalone applications that bundle:
 if sys.platform == 'darwin':  # macOS
     TESSERACT_BIN = '/opt/homebrew/bin/tesseract'
     TESSDATA_DIR = '/opt/homebrew/share/tessdata'
-    POPPLER_DIR = None  # macOS: poppler in PATH
+    POPPLER_DIR = '/opt/homebrew/bin'
+    POPPLER_BINS = ['pdftoppm', 'pdftocairo', 'pdfinfo']
 elif sys.platform == 'win32':  # Windows
     TESSERACT_BIN = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
     TESSDATA_DIR = r'C:\Program Files\Tesseract-OCR\tessdata'
-    POPPLER_DIR = r'C:\poppler\Library\bin'  # Poppler for Windows
+    POPPLER_DIR = r'C:\poppler\Library\bin'
+    POPPLER_BINS = None  # Bundle all .exe and .dll files
 
 datas = [
     (TESSDATA_DIR + '/tha.traineddata', 'tesseract/tessdata'),
     (TESSDATA_DIR + '/eng.traineddata', 'tesseract/tessdata'),
 ]
 
-# Windows: Bundle Poppler binaries
+# Bundle Poppler binaries (all platforms)
 if POPPLER_DIR and os.path.exists(POPPLER_DIR):
-    for file in os.listdir(POPPLER_DIR):
-        if file.endswith(('.exe', '.dll')):
-            datas.append((os.path.join(POPPLER_DIR, file), 'poppler/bin'))
+    if POPPLER_BINS:
+        # macOS/Linux: bundle specific binaries
+        for bin_name in POPPLER_BINS:
+            bin_path = os.path.join(POPPLER_DIR, bin_name)
+            if os.path.exists(bin_path):
+                datas.append((bin_path, 'poppler/bin'))
+    else:
+        # Windows: bundle all .exe and .dll files
+        for file in os.listdir(POPPLER_DIR):
+            if file.endswith(('.exe', '.dll')):
+                datas.append((os.path.join(POPPLER_DIR, file), 'poppler/bin'))
 
 binaries = [
     (TESSERACT_BIN, 'tesseract/bin'),
@@ -317,9 +335,9 @@ if getattr(sys, 'frozen', False):
     tessdata_dir = os.path.join(bundle_dir, 'tesseract', 'tessdata')
     os.environ['TESSDATA_PREFIX'] = tessdata_dir
 
-    # Configure Poppler (Windows only)
-    if sys.platform == 'win32':
-        poppler_path = os.path.join(bundle_dir, 'poppler', 'bin')
+    # Configure Poppler (all platforms)
+    poppler_path = os.path.join(bundle_dir, 'poppler', 'bin')
+    if os.path.exists(poppler_path):
         os.environ['PATH'] = poppler_path + os.pathsep + os.environ['PATH']
 ```
 
@@ -351,9 +369,9 @@ if getattr(sys, 'frozen', False):
 `.github/workflows/build-release.yml` runs:
 
 1. **macOS job** (runs on `macos-latest`):
-   - Install Tesseract + Thai language: `brew install tesseract tesseract-lang`
+   - Install Tesseract + Thai language + Poppler: `brew install tesseract tesseract-lang poppler`
    - Install Python dependencies
-   - Run PyInstaller
+   - Run PyInstaller (bundles Tesseract and Poppler binaries)
    - Create `PDF-to-Excel-Converter-macOS.zip`
    - Upload to GitHub Release
 

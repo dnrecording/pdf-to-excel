@@ -1,6 +1,8 @@
 """PDF table extraction using OCR for scanned documents."""
 
+import os
 import re
+import sys
 from pathlib import Path
 from typing import List, Optional, Union
 
@@ -10,6 +12,37 @@ from PIL import Image
 from PyPDF2 import PdfReader
 
 from .exceptions import ExtractionError, FileValidationError
+
+
+def _get_poppler_path() -> Optional[str]:
+    """
+    Get poppler path when running as bundled application.
+
+    Returns:
+        Path to poppler binaries if running as frozen app, None otherwise
+    """
+    if getattr(sys, 'frozen', False):
+        # Running as bundled app
+        bundle_dir = sys._MEIPASS
+
+        # Windows: poppler is bundled
+        if sys.platform == 'win32':
+            poppler_path = os.path.join(bundle_dir, 'poppler', 'bin')
+            if os.path.exists(poppler_path):
+                return poppler_path
+
+        # macOS: check for bundled poppler (if we decide to bundle it later)
+        elif sys.platform == 'darwin':
+            poppler_path = os.path.join(bundle_dir, 'poppler', 'bin')
+            if os.path.exists(poppler_path):
+                return poppler_path
+            # macOS: poppler is in Homebrew path, should be in PATH
+            # Check common Homebrew locations
+            for brew_path in ['/opt/homebrew/bin', '/usr/local/bin']:
+                if os.path.exists(os.path.join(brew_path, 'pdftoppm')):
+                    return brew_path
+
+    return None
 
 
 def pdf_needs_ocr(pdf_path: Union[str, Path]) -> bool:
@@ -91,7 +124,16 @@ class OCRExtractor:
             List of PIL Image objects
         """
         try:
-            images = convert_from_path(str(pdf_path), dpi=dpi, fmt="png")
+            # Get poppler path if running as bundled app
+            poppler_path = _get_poppler_path()
+
+            if poppler_path:
+                images = convert_from_path(
+                    str(pdf_path), dpi=dpi, fmt="png", poppler_path=poppler_path
+                )
+            else:
+                images = convert_from_path(str(pdf_path), dpi=dpi, fmt="png")
+
             return images
         except Exception as e:
             raise ExtractionError(f"Failed to convert PDF to images: {e}")
