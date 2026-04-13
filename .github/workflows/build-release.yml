@@ -140,6 +140,19 @@ jobs:
           & "C:\Program Files\Tesseract-OCR\tesseract.exe" --version
           & "C:\Program Files\Tesseract-OCR\tesseract.exe" --list-langs
 
+      - name: Install Poppler for PDF processing
+        run: |
+          Write-Host "Downloading Poppler..."
+          $popplerUrl = "https://github.com/oschwartz10612/poppler-windows/releases/download/v24.08.0-0/Release-24.08.0-0.zip"
+          $popplerZip = "$env:TEMP\poppler.zip"
+          Invoke-WebRequest -Uri $popplerUrl -OutFile $popplerZip
+
+          Write-Host "Extracting Poppler..."
+          Expand-Archive -Path $popplerZip -DestinationPath "C:\poppler" -Force
+
+          Write-Host "Verifying Poppler installation..."
+          Get-ChildItem "C:\poppler" -Recurse | Select-Object -First 10
+
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip

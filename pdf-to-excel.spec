@@ -15,16 +15,19 @@ from pathlib import Path
 
 block_cipher = None
 
-# Determine Tesseract paths
+# Determine Tesseract and Poppler paths
 if sys.platform == 'darwin':  # macOS
     TESSERACT_BIN = '/opt/homebrew/bin/tesseract'
     TESSDATA_DIR = '/opt/homebrew/share/tessdata'
+    POPPLER_DIR = None  # macOS: poppler comes with Homebrew, in PATH
 elif sys.platform == 'win32':  # Windows
     TESSERACT_BIN = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
     TESSDATA_DIR = r'C:\Program Files\Tesseract-OCR\tessdata'
+    POPPLER_DIR = r'C:\poppler\Library\bin'  # Poppler binaries for Windows
 else:  # Linux
     TESSERACT_BIN = '/usr/bin/tesseract'
     TESSDATA_DIR = '/usr/share/tesseract-ocr/4.00/tessdata'
+    POPPLER_DIR = None  # Linux: poppler in PATH
 
 # Data files to bundle
 datas = []
@@ -45,6 +48,13 @@ if os.path.exists(TESSDATA_DIR):
                 datas.append((real_path, 'tesseract/tessdata'))
             else:
                 datas.append((lang_file, 'tesseract/tessdata'))
+
+# Bundle Poppler binaries (Windows only)
+if POPPLER_DIR and os.path.exists(POPPLER_DIR):
+    for file in os.listdir(POPPLER_DIR):
+        if file.endswith(('.exe', '.dll')):
+            file_path = os.path.join(POPPLER_DIR, file)
+            datas.append((file_path, 'poppler/bin'))
 
 # Hidden imports that PyInstaller might miss
 hiddenimports = [
