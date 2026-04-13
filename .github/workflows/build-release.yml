@@ -155,7 +155,15 @@ jobs:
           Expand-Archive -Path $popplerZip -DestinationPath "C:\poppler" -Force
 
           Write-Host "Verifying Poppler installation..."
-          Get-ChildItem "C:\poppler" -Recurse | Select-Object -First 10
+          Write-Host "Directory structure:"
+          Get-ChildItem "C:\poppler" -Recurse -Depth 2 | Select-Object FullName
+
+          Write-Host "`nLooking for bin directory..."
+          $binDirs = Get-ChildItem "C:\poppler" -Recurse -Directory -Filter "bin" | Select-Object FullName
+          $binDirs | ForEach-Object { Write-Host "Found bin at: $($_.FullName)" }
+
+          Write-Host "`nLooking for executable files..."
+          Get-ChildItem "C:\poppler" -Recurse -Include "*.exe" | Select-Object FullName | ForEach-Object { Write-Host $_.FullName }
 
       - name: Install Python dependencies
         run: |

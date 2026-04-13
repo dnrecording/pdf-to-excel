@@ -25,7 +25,29 @@ if sys.platform == 'darwin':  # macOS
 elif sys.platform == 'win32':  # Windows
     TESSERACT_BIN = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
     TESSDATA_DIR = r'C:\Program Files\Tesseract-OCR\tessdata'
-    POPPLER_DIR = r'C:\poppler\Library\bin'  # Poppler binaries for Windows
+
+    # Find poppler bin directory (structure varies by release)
+    POPPLER_DIR = None
+    for possible_path in [
+        r'C:\poppler\Library\bin',
+        r'C:\poppler\poppler-24.08.0\Library\bin',
+        r'C:\poppler\bin',
+    ]:
+        if os.path.exists(possible_path):
+            POPPLER_DIR = possible_path
+            print(f"Found Poppler at: {POPPLER_DIR}")
+            break
+
+    if not POPPLER_DIR:
+        # Search for it
+        import glob
+        matches = glob.glob(r'C:\poppler\**\bin', recursive=True)
+        if matches:
+            POPPLER_DIR = matches[0]
+            print(f"Found Poppler bin directory at: {POPPLER_DIR}")
+        else:
+            print("WARNING: Poppler bin directory not found in C:\\poppler")
+
     POPPLER_BINS = None  # Bundle all .exe and .dll files
 else:  # Linux
     TESSERACT_BIN = '/usr/bin/tesseract'
@@ -58,18 +80,26 @@ if os.path.exists(TESSDATA_DIR):
 
 # Bundle Poppler binaries
 if POPPLER_DIR and os.path.exists(POPPLER_DIR):
+    print(f"Bundling Poppler from: {POPPLER_DIR}")
     if POPPLER_BINS:
         # macOS/Linux: bundle specific binaries
         for bin_name in POPPLER_BINS:
             bin_path = os.path.join(POPPLER_DIR, bin_name)
             if os.path.exists(bin_path):
                 binaries.append((bin_path, 'poppler/bin'))
+                print(f"  - Bundled: {bin_name}")
     else:
         # Windows: bundle all .exe and .dll files
+        bundled_count = 0
         for file in os.listdir(POPPLER_DIR):
             if file.endswith(('.exe', '.dll')):
                 file_path = os.path.join(POPPLER_DIR, file)
                 binaries.append((file_path, 'poppler/bin'))
+                bundled_count += 1
+                print(f"  - Bundled: {file}")
+        print(f"Total Poppler files bundled: {bundled_count}")
+else:
+    print(f"WARNING: Poppler directory not found at {POPPLER_DIR}")
 
 # Hidden imports that PyInstaller might miss
 hiddenimports = [
