@@ -9,6 +9,9 @@ pdf2image>=1.16.3
 Pillow>=10.0.0
 PyPDF2>=3.0.0
 
+# GUI drag & drop support
+tkinterdnd2>=0.3.0
+
 # Testing (development)
 pytest>=7.4.0
 pytest-cov>=4.1.0

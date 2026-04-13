@@ -6,6 +6,12 @@ import threading
 from pathlib import Path
 from typing import Optional
 
+try:
+    from tkinterdnd2 import DND_FILES, TkinterDnD
+    HAS_DND = True
+except ImportError:
+    HAS_DND = False
+
 from .extractor import OCRExtractor
 from .writer import ExcelWriter
 from .exceptions import PDFToExcelError
@@ -231,15 +237,26 @@ class PDFToExcelGUI:
         self.drop_zone_bg = NORD_COLORS['bg_lighter']
         self.drop_zone_border = NORD_COLORS['bg_highlight']
         self.drop_zone_icon = "📁"
-        self.drop_zone_text = "Click to select PDF"
+        # Show drag & drop hint if available
+        if HAS_DND and isinstance(self.root, TkinterDnD.Tk):
+            self.drop_zone_text = "Click to select or drag & drop PDF"
+        else:
+            self.drop_zone_text = "Click to select PDF"
 
         # Draw the drop zone button
         self._draw_drop_zone()
 
-        # Bind events to entire canvas
+        # Bind click events to entire canvas
         self.drop_zone.bind('<Button-1>', self._on_click_drop_zone)
         self.drop_zone.bind('<Enter>', self._on_drop_zone_enter)
         self.drop_zone.bind('<Leave>', self._on_drop_zone_leave)
+
+        # Set up drag & drop if available
+        if HAS_DND and isinstance(self.root, TkinterDnD.Tk):
+            self.drop_zone.drop_target_register(DND_FILES)
+            self.drop_zone.dnd_bind('<<Drop>>', self._on_drop)
+            self.drop_zone.dnd_bind('<<DragEnter>>', self._on_drag_enter)
+            self.drop_zone.dnd_bind('<<DragLeave>>', self._on_drag_leave)
 
         # Convert button
         self.convert_btn = ModernButton(
@@ -341,6 +358,62 @@ class PDFToExcelGUI:
             self.drop_zone_border = NORD_COLORS['accent_green']
 
         self._draw_drop_zone()
+
+    def _on_drag_enter(self, event) -> None:
+        """Handle file dragged over drop zone."""
+        # Don't show hover effect if converting or browsing
+        if self.is_converting or self.is_browsing:
+            return
+
+        # Highlight drop zone
+        self.drop_zone_bg = NORD_COLORS['bg_highlight']
+        self.drop_zone_border = NORD_COLORS['accent']
+        self._draw_drop_zone()
+
+    def _on_drag_leave(self, event) -> None:
+        """Handle file dragged away from drop zone."""
+        # Reset to normal state
+        if not self.pdf_path:
+            self.drop_zone_bg = NORD_COLORS['bg_lighter']
+            self.drop_zone_border = NORD_COLORS['bg_highlight']
+        else:
+            self.drop_zone_bg = NORD_COLORS['bg_highlight']
+            self.drop_zone_border = NORD_COLORS['accent_green']
+        self._draw_drop_zone()
+
+    def _on_drop(self, event) -> None:
+        """Handle file dropped on drop zone."""
+        # Don't accept drops during conversion or browsing
+        if self.is_converting or self.is_browsing:
+            return
+
+        # Parse the dropped file path
+        # The data comes as a string, possibly with curly braces on Windows
+        file_path = event.data
+
+        # Clean up the path (remove curly braces if present)
+        if file_path.startswith('{') and file_path.endswith('}'):
+            file_path = file_path[1:-1]
+
+        # Handle multiple files (take first one)
+        if ' ' in file_path and not Path(file_path).exists():
+            # Multiple files might be space-separated
+            # Try to find the first valid path
+            parts = file_path.split(' ')
+            for part in parts:
+                clean_part = part.strip('{}')
+                if clean_part and Path(clean_part).exists():
+                    file_path = clean_part
+                    break
+
+        # Validate and set the file
+        if file_path and Path(file_path).exists():
+            self._set_pdf_file(file_path)
+        else:
+            self.status_label.config(
+                text="Invalid file. Please drop a valid PDF file.",
+                foreground=NORD_COLORS['accent_red']
+            )
 
     def _browse_file(self) -> None:
         """Open file browser to select PDF."""
@@ -528,7 +601,12 @@ class PDFToExcelGUI:
 
 def main() -> None:
     """Run the GUI application."""
-    root = tk.Tk()
+    # Use TkinterDnD if available for drag & drop support
+    if HAS_DND:
+        root = TkinterDnD.Tk()
+    else:
+        root = tk.Tk()
+
     app = PDFToExcelGUI(root)
     root.mainloop()
 

@@ -333,3 +333,128 @@ class TestPDFToExcelGUI:
             # Should have called the convert method which starts a thread
             mock_thread.assert_called_once()
             mock_thread_instance.start.assert_called_once()
+
+    def test_drag_enter(self, gui_app):
+        """Test file dragged over drop zone shows hover effect."""
+        # Save original state
+        original_bg = gui_app.drop_zone_bg
+        original_border = gui_app.drop_zone_border
+
+        event = Mock()
+        gui_app._on_drag_enter(event)
+
+        # Should change appearance
+        assert gui_app.drop_zone_bg == NORD_COLORS['bg_highlight']
+        assert gui_app.drop_zone_border == NORD_COLORS['accent']
+
+    def test_drag_enter_during_conversion(self, gui_app):
+        """Test drag enter during conversion doesn't change appearance."""
+        gui_app.is_converting = True
+        original_bg = gui_app.drop_zone_bg
+
+        event = Mock()
+        gui_app._on_drag_enter(event)
+
+        # Should not change
+        assert gui_app.drop_zone_bg == original_bg
+
+    def test_drag_leave(self, gui_app):
+        """Test file dragged away from drop zone resets appearance."""
+        # Start with highlight state
+        gui_app.drop_zone_bg = NORD_COLORS['bg_highlight']
+        gui_app.drop_zone_border = NORD_COLORS['accent']
+
+        event = Mock()
+        gui_app._on_drag_leave(event)
+
+        # Should reset to normal
+        assert gui_app.drop_zone_bg == NORD_COLORS['bg_lighter']
+        assert gui_app.drop_zone_border == NORD_COLORS['bg_highlight']
+
+    def test_drag_leave_with_file_selected(self, gui_app):
+        """Test drag leave when file is already selected."""
+        gui_app.pdf_path = "/path/to/test.pdf"
+
+        event = Mock()
+        gui_app._on_drag_leave(event)
+
+        # Should reset to selected state
+        assert gui_app.drop_zone_bg == NORD_COLORS['bg_highlight']
+        assert gui_app.drop_zone_border == NORD_COLORS['accent_green']
+
+    @patch('pdf_to_excel.gui.Path')
+    @patch('pdf_to_excel.gui.messagebox.showerror')
+    def test_drop_valid_pdf(self, mock_error, mock_path, gui_app):
+        """Test dropping a valid PDF file."""
+        # Mock Path to say file exists
+        mock_path_instance = Mock()
+        mock_path_instance.exists.return_value = True
+        mock_path_instance.name = "test.pdf"
+        mock_path.return_value = mock_path_instance
+
+        event = Mock()
+        event.data = "/path/to/test.pdf"
+
+        gui_app._on_drop(event)
+
+        # Should set the file
+        assert gui_app.pdf_path == "/path/to/test.pdf"
+        assert not gui_app.convert_btn.is_disabled
+
+    @patch('pdf_to_excel.gui.Path')
+    def test_drop_file_with_curly_braces(self, mock_path, gui_app):
+        """Test dropping file with curly braces (Windows format)."""
+        mock_path_instance = Mock()
+        mock_path_instance.exists.return_value = True
+        mock_path_instance.name = "test.pdf"
+        mock_path.return_value = mock_path_instance
+
+        event = Mock()
+        event.data = "{/path/to/test.pdf}"
+
+        gui_app._on_drop(event)
+
+        # Should strip curly braces and set file
+        assert gui_app.pdf_path == "/path/to/test.pdf"
+
+    @patch('pdf_to_excel.gui.Path')
+    def test_drop_invalid_file(self, mock_path, gui_app):
+        """Test dropping an invalid file."""
+        mock_path_instance = Mock()
+        mock_path_instance.exists.return_value = False
+        mock_path.return_value = mock_path_instance
+
+        event = Mock()
+        event.data = "/path/to/nonexistent.pdf"
+
+        gui_app._on_drop(event)
+
+        # Should not set file
+        assert gui_app.pdf_path is None
+        assert NORD_COLORS['accent_red'] == gui_app.status_label['foreground']
+
+    def test_drop_during_conversion(self, gui_app):
+        """Test dropping file during conversion is blocked."""
+        gui_app.is_converting = True
+
+        event = Mock()
+        event.data = "/path/to/test.pdf"
+
+        original_path = gui_app.pdf_path
+        gui_app._on_drop(event)
+
+        # Should not change path
+        assert gui_app.pdf_path == original_path
+
+    def test_drop_during_browsing(self, gui_app):
+        """Test dropping file during browsing is blocked."""
+        gui_app.is_browsing = True
+
+        event = Mock()
+        event.data = "/path/to/test.pdf"
+
+        original_path = gui_app.pdf_path
+        gui_app._on_drop(event)
+
+        # Should not change path
+        assert gui_app.pdf_path == original_path
