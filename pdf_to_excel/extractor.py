@@ -12,6 +12,7 @@ from PIL import Image
 from PyPDF2 import PdfReader
 
 from .exceptions import ExtractionError, FileValidationError
+from .post_processor import OCRPostProcessor
 
 
 def _get_poppler_path() -> Optional[str]:
@@ -123,6 +124,9 @@ class OCRExtractor:
         self.languages = "+".join(languages)
         self.ocr_mode = ocr_mode
         self.psm_mode = psm_mode
+
+        # Initialize post-processor for cleaning OCR errors
+        self.post_processor = OCRPostProcessor()
 
     def pdf_to_images(
         self, pdf_path: Union[str, Path], dpi: int = 300
@@ -273,6 +277,8 @@ class OCRExtractor:
             table = self.parse_table_from_text(full_text)
 
             if table:
+                # Clean OCR errors in the parsed table
+                table = self.post_processor.clean_table_data(table)
                 return [table]
             else:
                 return []

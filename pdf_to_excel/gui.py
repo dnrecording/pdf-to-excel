@@ -442,7 +442,7 @@ class PDFToExcelGUI:
         """Perform the actual conversion (runs in background thread)."""
         try:
             # Update status
-            self.root.after(0, self._update_status, "🔍 Extracting text from PDF...", NORD_COLORS['accent_blue'])
+            self.root.after(0, self._update_status, "🔍 Extracting and processing PDF...", NORD_COLORS['accent_blue'])
 
             # Extract with OCR
             ocr_mode = self._get_ocr_mode()
@@ -454,14 +454,10 @@ class PDFToExcelGUI:
                 psm_mode=psm_mode,
             )
 
-            text = extractor.extract_text_from_pdf(pdf_path)
+            # Extract tables (includes OCR, parsing, and post-processing)
+            tables = extractor.extract_tables_from_pdf(pdf_path)
 
-            self.root.after(0, self._update_status, "📊 Parsing table structure...", NORD_COLORS['accent_blue'])
-
-            # Parse table
-            table_data = extractor.parse_table_from_text(text)
-
-            if not table_data:
+            if not tables or len(tables) == 0:
                 self.root.after(
                     0,
                     self._show_error,
@@ -469,6 +465,9 @@ class PDFToExcelGUI:
                     "Could not detect table structure in the PDF.\nThe PDF may not contain tabular data.",
                 )
                 return
+
+            # Use first table
+            table_data = tables[0]
 
             self.root.after(
                 0, self._update_status, f"💾 Writing Excel file ({len(table_data)} rows)...", NORD_COLORS['accent_blue']

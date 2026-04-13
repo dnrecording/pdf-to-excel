@@ -6,14 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 PDF to Excel converter with **Thai/English language support** using **OCR** (Optical Character Recognition). Designed specifically for scanned documents where native PDF text extraction doesn't work.
 
-**Critical Context:** This project was built using **Test-Driven Development (TDD)** with 40 passing tests.
+**Critical Context:** This project was built using **Test-Driven Development (TDD)** with 54 passing tests.
 
 ## Key Commands
 
 ### Development
 ```bash
 make gui       # Launch GUI application (primary interface)
-make test      # Run all 40 tests
+make test      # Run all 54 tests
 make coverage  # Run tests with coverage report
 make format    # Format code with black
 make lint      # Check code style with flake8
@@ -58,7 +58,7 @@ tesseract --list-langs | grep tha
 
 **OCR-Based Pipeline:**
 ```
-PDF → pdf2image → Tesseract OCR → Table Parser → Excel Writer
+PDF → pdf2image → Tesseract OCR → Table Parser → Post-Processor → Excel Writer
 ```
 
 1. **extractor.py** (`OCRExtractor`):
@@ -66,27 +66,41 @@ PDF → pdf2image → Tesseract OCR → Table Parser → Excel Writer
    - **Critical:** Explicitly passes poppler_path to convert_from_path when running as bundled app
    - Runs Tesseract OCR with Thai+English
    - Parses table structure from OCR text using regex (splits on 2+ spaces/tabs)
+   - **Post-processes** parsed table data using OCRPostProcessor to fix common OCR errors
    - **Critical:** Uses OCR mode 3 (default) and PSM mode 6 (table)
    - **No image preprocessing** - raw images work best for Thai (preprocessing destroyed tone marks)
+   - **IMPORTANT:** Always use `extract_tables_from_pdf()` which includes post-processing. Never call `extract_text_from_pdf()` + `parse_table_from_text()` separately as this bypasses post-processing
 
-2. **writer.py** (`ExcelWriter`):
+2. **post_processor.py** (`OCRPostProcessor`):
+   - Cleans common OCR errors in numeric data:
+     - Removes spaces within numbers: "812, 399,00" → "812,399.00"
+     - Converts tilde to minus for negative numbers: "~1,000,000.00" → "-1,000,000.00"
+     - Fixes decimal separators: ",00" → ".00"
+     - Corrects malformed thousand separators
+     - Preserves small numbers (≤4 digits) without adding separators
+   - Only processes cells with numeric data (no English letters)
+   - Uses regex pattern matching to extract and clean numbers within mixed content
+
+3. **writer.py** (`ExcelWriter`):
    - Writes to Excel with openpyxl
    - Applies Thai font (TH SarabunPSK, 16pt)
    - **Handles variable column counts** by padding rows to max_cols
    - Auto-adjusts column widths (Thai chars count as 1.5x wider)
 
-3. **gui.py** (`PDFToExcelGUI`):
+4. **gui.py** (`PDFToExcelGUI`):
    - Tkinter-based Nord dark theme UI
    - Custom `ModernButton` canvas widget with hover effects
    - Drop zone for file selection (click anywhere to browse)
    - Background threading prevents UI freezing during OCR
    - **Debouncing:** `is_browsing` flag prevents multiple concurrent file dialogs
+   - Uses `extract_tables_from_pdf()` to ensure post-processing is applied
 
-4. **cli.py**:
+5. **cli.py**:
    - Simplified CLI with essential flags: `--lang`, `--verbose`, `--ocr-mode`, `--psm`
    - Removed: `--high-quality`, `--no-enhance`, `--no-format` (not needed)
+   - Uses `extract_tables_from_pdf()` to ensure post-processing is applied
 
-5. **exceptions.py**:
+6. **exceptions.py**:
    - Exception hierarchy: `PDFToExcelError` → `FileValidationError`, `ExtractionError`, `WriterError`
 
 ### Design Decisions & Lessons Learned
@@ -111,8 +125,14 @@ PDF → pdf2image → Tesseract OCR → Table Parser → Excel Writer
 - `is_browsing` debouncing prevents rapid-click issues
 - Canvas-based buttons for rounded corners and hover effects
 
+**OCR Post-Processing:**
+- Post-processor fixes common OCR errors automatically
+- Integrated into extraction pipeline via `extract_tables_from_pdf()`
+- Never bypass post-processing by calling extract/parse methods separately
+- Handles numeric formatting, negative numbers, and decimal separators
+
 **Testing:**
-- 40 tests: 25 GUI tests + 15 extractor/writer/utils tests
+- 54 tests: 25 GUI tests + 14 post-processor tests + 10 extractor tests + 5 utils tests
 - GUI tests use mocks for file dialogs and threading
 - All tkinter widgets created in fixtures must be destroyed in teardown
 
@@ -124,18 +144,20 @@ pdf_to_excel/
 ├── __main__.py         # Entry point for python -m
 ├── cli.py             # Command-line interface
 ├── extractor.py       # OCR extraction (OCRExtractor class)
+├── post_processor.py  # OCR post-processing (OCRPostProcessor class)
 ├── writer.py          # Excel writing (ExcelWriter class)
 ├── gui.py             # GUI app (PDFToExcelGUI, ModernButton)
 ├── utils.py           # PDF validation helpers
 └── exceptions.py      # Custom exception hierarchy
 
 tests/
-├── conftest.py        # Shared fixtures (sample_thai_dataframe)
+├── conftest.py              # Shared fixtures (sample_thai_dataframe)
 ├── unit/
-│   ├── test_utils.py       # 5 tests
-│   ├── test_extractor.py   # 10 tests
-│   ├── test_writer.py      # (not yet created)
-│   └── test_gui.py         # 25 tests
+│   ├── test_utils.py            # 5 tests
+│   ├── test_extractor.py        # 10 tests
+│   ├── test_post_processor.py   # 14 tests
+│   ├── test_writer.py           # (not yet created)
+│   └── test_gui.py              # 25 tests
 └── integration/       # (placeholder)
 
 gui_launcher.py        # GUI entry point
@@ -257,6 +279,11 @@ def _browse_file(self):
 - **Symptom:** "บ ร ิ ษั ท" instead of "บริษัท", all content in one column instead of multiple
 - **Cause:** Using standard `tessdata` instead of `tessdata_best` for Thai language
 - **Fix:** Download Thai language data from `tessdata_best` repository for better character recognition quality
+
+**Issue:** Numbers in Excel have spaces or wrong formatting (e.g., "812, 399,00" or "~1,000,000.00")
+- **Symptom:** Spaces within numbers, comma instead of period for decimals, tilde instead of minus sign
+- **Cause:** Post-processing not being applied (calling extract/parse methods separately)
+- **Fix:** Always use `extract_tables_from_pdf()` which includes post-processing. Never call `extract_text_from_pdf()` + `parse_table_from_text()` separately
 
 ## Testing Strategy
 
@@ -487,6 +514,9 @@ This project evolved through several iterations:
 6. **GUI refinement:** Simplified design based on user feedback (removed bottom text, simplified drop zone)
 7. **Packaging:** Added PyInstaller configuration and build scripts for standalone apps
 8. **CI/CD:** Implemented GitHub Actions for automated cross-platform builds
-9. **Current:** Production-ready with automated distribution for both macOS and Windows
+9. **Poppler bundling:** Fixed cross-platform PDF conversion issues
+10. **OCR quality improvements:** Switched to tessdata_best for better Thai recognition
+11. **Post-processing:** Added OCRPostProcessor to automatically fix common OCR errors (spaces in numbers, tilde/minus, decimal separators)
+12. **Current:** Production-ready with automated distribution for both macOS and Windows
 
 The `/spec` directory contains original design docs that don't fully match current implementation - refer to actual code as source of truth.

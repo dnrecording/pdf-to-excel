@@ -100,22 +100,21 @@ Supported languages: tha (Thai), eng (English)
             languages=args.lang, ocr_mode=args.ocr_mode, psm_mode=args.psm
         )
 
-        text = extractor.extract_text_from_pdf(args.input_pdf)
-
-        if args.verbose:
-            print(f"   → Extracted {len(text)} characters")
-
-        # Parse table
+        # Extract tables (includes OCR, parsing, and post-processing)
         print("📊 Parsing table structure...")
-        table_data = extractor.parse_table_from_text(text)
+        tables = extractor.extract_tables_from_pdf(args.input_pdf)
 
-        if not table_data:
+        if not tables or len(tables) == 0:
             print("❌ No table structure detected in PDF")
             print("   The PDF may not contain tabular data,")
             print("   or the OCR could not identify clear columns.")
             return 1
 
-        print(f"   → Found table with {len(table_data)} rows")
+        # Use first table
+        table_data = tables[0]
+
+        if args.verbose:
+            print(f"   → Found table with {len(table_data)} rows, {len(table_data[0]) if table_data else 0} columns")
 
         # Write to Excel
         print(f"\n💾 Writing to Excel: {args.output_excel}")
