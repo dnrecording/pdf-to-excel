@@ -241,12 +241,14 @@ def _browse_file(self):
 - **Fix:** Workflow uses Chocolatey package manager (reliable and pre-installed on GitHub Actions runners). If Thai language download fails, update tessdata URL in workflow.
 
 **Issue:** App fails with "Unable to get page count. Is poppler installed?" (both macOS and Windows)
-- **Cause:** Poppler binaries not bundled or not found in bundled app
+- **Cause:** Poppler binaries not bundled correctly or not found in bundled app
 - **Fix:**
+  - **CRITICAL**: Poppler files must be in `binaries` list, not `datas` (maintains executable permissions and DLL loading)
   - Spec file bundles poppler binaries for all platforms
   - Runtime hook adds poppler to PATH
   - Extractor explicitly passes poppler_path to convert_from_path when running as frozen app
   - Workflow installs poppler on both macOS and Windows
+  - Added debug output to diagnose bundling issues
 
 ## Testing Strategy
 
@@ -302,23 +304,25 @@ datas = [
     (TESSDATA_DIR + '/eng.traineddata', 'tesseract/tessdata'),
 ]
 
-# Bundle Poppler binaries (all platforms)
+binaries = []
+
+# Bundle Tesseract binary
+if os.path.exists(TESSERACT_BIN):
+    binaries.append((TESSERACT_BIN, 'tesseract/bin'))
+
+# Bundle Poppler binaries (CRITICAL: must be in binaries, not datas)
 if POPPLER_DIR and os.path.exists(POPPLER_DIR):
     if POPPLER_BINS:
         # macOS/Linux: bundle specific binaries
         for bin_name in POPPLER_BINS:
             bin_path = os.path.join(POPPLER_DIR, bin_name)
             if os.path.exists(bin_path):
-                datas.append((bin_path, 'poppler/bin'))
+                binaries.append((bin_path, 'poppler/bin'))
     else:
         # Windows: bundle all .exe and .dll files
         for file in os.listdir(POPPLER_DIR):
             if file.endswith(('.exe', '.dll')):
-                datas.append((os.path.join(POPPLER_DIR, file), 'poppler/bin'))
-
-binaries = [
-    (TESSERACT_BIN, 'tesseract/bin'),
-]
+                binaries.append((os.path.join(POPPLER_DIR, file), 'poppler/bin'))
 ```
 
 **hooks/hook-pytesseract.py** (runtime hook):

@@ -36,9 +36,12 @@ else:  # Linux
 # Data files to bundle
 datas = []
 
+# Binary files to bundle
+binaries = []
+
 # Bundle Tesseract binary
 if os.path.exists(TESSERACT_BIN):
-    datas.append((TESSERACT_BIN, 'tesseract/bin'))
+    binaries.append((TESSERACT_BIN, 'tesseract/bin'))
 
 # Bundle Thai and English language data
 if os.path.exists(TESSDATA_DIR):
@@ -60,13 +63,13 @@ if POPPLER_DIR and os.path.exists(POPPLER_DIR):
         for bin_name in POPPLER_BINS:
             bin_path = os.path.join(POPPLER_DIR, bin_name)
             if os.path.exists(bin_path):
-                datas.append((bin_path, 'poppler/bin'))
+                binaries.append((bin_path, 'poppler/bin'))
     else:
         # Windows: bundle all .exe and .dll files
         for file in os.listdir(POPPLER_DIR):
             if file.endswith(('.exe', '.dll')):
                 file_path = os.path.join(POPPLER_DIR, file)
-                datas.append((file_path, 'poppler/bin'))
+                binaries.append((file_path, 'poppler/bin'))
 
 # Hidden imports that PyInstaller might miss
 hiddenimports = [
@@ -82,7 +85,7 @@ hiddenimports = [
 a = Analysis(
     ['gui_launcher.py'],
     pathex=[],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=['hooks'],

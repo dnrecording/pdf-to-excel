@@ -24,22 +24,36 @@ def _get_poppler_path() -> Optional[str]:
     if getattr(sys, 'frozen', False):
         # Running as bundled app
         bundle_dir = sys._MEIPASS
+        print(f"[DEBUG] Running as frozen app, bundle_dir: {bundle_dir}")
 
         # Windows: poppler is bundled
         if sys.platform == 'win32':
             poppler_path = os.path.join(bundle_dir, 'poppler', 'bin')
+            print(f"[DEBUG] Windows poppler_path: {poppler_path}")
+            print(f"[DEBUG] Path exists: {os.path.exists(poppler_path)}")
             if os.path.exists(poppler_path):
+                # List files in poppler directory
+                try:
+                    files = os.listdir(poppler_path)
+                    print(f"[DEBUG] Poppler files: {files[:10]}")  # Show first 10 files
+                except Exception as e:
+                    print(f"[DEBUG] Error listing poppler files: {e}")
                 return poppler_path
+            else:
+                print(f"[DEBUG] Poppler path does not exist")
 
-        # macOS: check for bundled poppler (if we decide to bundle it later)
+        # macOS: check for bundled poppler
         elif sys.platform == 'darwin':
             poppler_path = os.path.join(bundle_dir, 'poppler', 'bin')
+            print(f"[DEBUG] macOS poppler_path: {poppler_path}")
             if os.path.exists(poppler_path):
                 return poppler_path
             # macOS: poppler is in Homebrew path, should be in PATH
             # Check common Homebrew locations
             for brew_path in ['/opt/homebrew/bin', '/usr/local/bin']:
-                if os.path.exists(os.path.join(brew_path, 'pdftoppm')):
+                pdftoppm_path = os.path.join(brew_path, 'pdftoppm')
+                if os.path.exists(pdftoppm_path):
+                    print(f"[DEBUG] Found Homebrew poppler at: {brew_path}")
                     return brew_path
 
     return None
@@ -127,15 +141,21 @@ class OCRExtractor:
             # Get poppler path if running as bundled app
             poppler_path = _get_poppler_path()
 
+            print(f"[DEBUG] Using poppler_path: {poppler_path}")
+
             if poppler_path:
+                print(f"[DEBUG] Calling convert_from_path with poppler_path={poppler_path}")
                 images = convert_from_path(
                     str(pdf_path), dpi=dpi, fmt="png", poppler_path=poppler_path
                 )
             else:
+                print(f"[DEBUG] Calling convert_from_path without poppler_path (using system PATH)")
                 images = convert_from_path(str(pdf_path), dpi=dpi, fmt="png")
 
+            print(f"[DEBUG] Successfully converted {len(images)} pages")
             return images
         except Exception as e:
+            print(f"[DEBUG] Error in pdf_to_images: {e}")
             raise ExtractionError(f"Failed to convert PDF to images: {e}")
 
     def extract_text_from_image(
