@@ -14,7 +14,8 @@ except ImportError:
 
 from .extractor import OCRExtractor
 from .writer import ExcelWriter
-from .exceptions import PDFToExcelError
+from .exceptions import PDFToExcelError, FileValidationError
+from .page_selector import parse_page_selection, get_pdf_page_count, validate_page_selection
 
 
 # Nord color scheme
@@ -117,7 +118,7 @@ class PDFToExcelGUI:
         """Initialize the GUI."""
         self.root = root
         self.root.title("PDF to Excel Converter")
-        self.root.geometry("650x550")
+        self.root.geometry("700x650")
         self.root.resizable(False, False)
         self.root.configure(bg=NORD_COLORS['bg'])
 
@@ -258,6 +259,98 @@ class PDFToExcelGUI:
             self.drop_zone.dnd_bind('<<DragEnter>>', self._on_drag_enter)
             self.drop_zone.dnd_bind('<<DragLeave>>', self._on_drag_leave)
 
+        # Page selection frame - improved layout
+        page_frame = tk.Frame(main_frame, bg=NORD_COLORS['bg'])
+        page_frame.grid(row=3, column=0, pady=(15, 0))
+
+        # Page selection container with rounded background
+        page_container = tk.Frame(
+            page_frame,
+            bg=NORD_COLORS['bg_lighter'],
+            highlightthickness=1,
+            highlightbackground=NORD_COLORS['bg_highlight']
+        )
+        page_container.pack(fill='x', padx=20)
+
+        # Inner padding frame
+        page_inner = tk.Frame(page_container, bg=NORD_COLORS['bg_lighter'])
+        page_inner.pack(fill='x', padx=15, pady=12)
+
+        # Page selection label - improved styling
+        page_label_frame = tk.Frame(page_inner, bg=NORD_COLORS['bg_lighter'])
+        page_label_frame.pack(anchor='w')
+
+        page_label = tk.Label(
+            page_label_frame,
+            text="📄 Select Pages",
+            font=("SF Pro", 12, "bold"),
+            bg=NORD_COLORS['bg_lighter'],
+            fg=NORD_COLORS['fg']
+        )
+        page_label.pack(side='left')
+
+        # Optional badge
+        optional_badge = tk.Label(
+            page_label_frame,
+            text="OPTIONAL",
+            font=("SF Pro", 8, "bold"),
+            bg=NORD_COLORS['bg_highlight'],
+            fg=NORD_COLORS['fg_dim'],
+            padx=6,
+            pady=2
+        )
+        optional_badge.pack(side='left', padx=(8, 0))
+
+        # Page entry field - improved with placeholder and border
+        entry_frame = tk.Frame(page_inner, bg=NORD_COLORS['bg_lighter'])
+        entry_frame.pack(fill='x', pady=(8, 0))
+
+        self.page_entry = tk.Entry(
+            entry_frame,
+            font=("SF Pro", 13),
+            bg=NORD_COLORS['bg'],
+            fg=NORD_COLORS['fg'],
+            insertbackground=NORD_COLORS['accent'],
+            relief='flat',
+            bd=0,
+            highlightthickness=2,
+            highlightcolor=NORD_COLORS['accent'],
+            highlightbackground=NORD_COLORS['bg_highlight']
+        )
+        self.page_entry.pack(fill='x', ipady=8, ipadx=10)
+
+        # Add placeholder text
+        self.page_entry_placeholder = 'Leave empty for all pages, or enter: 1, 1-3, 1,3,5-7'
+        self.page_entry.insert(0, self.page_entry_placeholder)
+        self.page_entry.config(fg=NORD_COLORS['fg_dim'])
+
+        # Bind events for placeholder behavior
+        self.page_entry.bind('<FocusIn>', self._on_page_entry_focus_in)
+        self.page_entry.bind('<FocusOut>', self._on_page_entry_focus_out)
+        self.page_entry.bind('<KeyRelease>', self._on_page_entry_change)
+
+        # Hint label - improved visibility
+        hint_frame = tk.Frame(page_inner, bg=NORD_COLORS['bg_lighter'])
+        hint_frame.pack(fill='x', pady=(6, 0))
+
+        hint_icon = tk.Label(
+            hint_frame,
+            text="💡",
+            font=("SF Pro", 10),
+            bg=NORD_COLORS['bg_lighter']
+        )
+        hint_icon.pack(side='left')
+
+        self.hint_label = tk.Label(
+            hint_frame,
+            text='Examples: "1" (first page), "1-3" (pages 1-3), "1,5,8-10" (mixed)',
+            font=("SF Pro", 10),
+            bg=NORD_COLORS['bg_lighter'],
+            fg=NORD_COLORS['fg_dim'],
+            justify='left'
+        )
+        self.hint_label.pack(side='left', padx=(5, 0))
+
         # Convert button
         self.convert_btn = ModernButton(
             main_frame,
@@ -268,7 +361,7 @@ class PDFToExcelGUI:
             bg=NORD_COLORS['accent'],
             hover_bg=NORD_COLORS['frost']
         )
-        self.convert_btn.grid(row=3, column=0, pady=(0, 25))
+        self.convert_btn.grid(row=4, column=0, pady=(20, 25))
         self.convert_btn.set_state('disabled')
 
         # Progress bar
@@ -277,7 +370,7 @@ class PDFToExcelGUI:
             mode="indeterminate",
             length=500
         )
-        self.progress.grid(row=4, column=0, pady=(0, 15))
+        self.progress.grid(row=5, column=0, pady=(0, 15))
 
         # Status label
         self.status_label = tk.Label(
@@ -287,7 +380,7 @@ class PDFToExcelGUI:
             bg=NORD_COLORS['bg'],
             fg=NORD_COLORS['fg_dim']
         )
-        self.status_label.grid(row=5, column=0)
+        self.status_label.grid(row=6, column=0)
 
     def _draw_drop_zone(self) -> None:
         """Draw the drop zone button - simple rectangle."""
@@ -460,6 +553,13 @@ class PDFToExcelGUI:
         self.pdf_path = file_path
         filename = Path(file_path).name
 
+        # Get page count
+        try:
+            page_count = get_pdf_page_count(file_path)
+            page_info = f" ({page_count} page{'s' if page_count > 1 else ''})"
+        except Exception:
+            page_info = ""
+
         # Update drop zone appearance
         self.drop_zone_bg = NORD_COLORS['bg_highlight']
         self.drop_zone_border = NORD_COLORS['accent_green']
@@ -470,7 +570,7 @@ class PDFToExcelGUI:
         # Update UI
         self.convert_btn.set_state('normal')
         self.status_label.config(
-            text=f"Ready to convert: {filename}",
+            text=f"Ready to convert: {filename}{page_info}",
             fg=NORD_COLORS['accent_green']
         )
 
@@ -481,6 +581,90 @@ class PDFToExcelGUI:
     def _get_psm_mode(self) -> int:
         """Get PSM mode (using default)."""
         return 6  # Table mode
+
+    def _on_page_entry_focus_in(self, event) -> None:
+        """Handle focus in event for page entry (clear placeholder)."""
+        if self.page_entry.get() == self.page_entry_placeholder:
+            self.page_entry.delete(0, tk.END)
+            self.page_entry.config(fg=NORD_COLORS['fg'])
+
+    def _on_page_entry_focus_out(self, event) -> None:
+        """Handle focus out event for page entry (restore placeholder if empty)."""
+        if not self.page_entry.get().strip():
+            self.page_entry.insert(0, self.page_entry_placeholder)
+            self.page_entry.config(fg=NORD_COLORS['fg_dim'])
+
+    def _on_page_entry_change(self, event) -> None:
+        """Handle real-time validation of page entry - update bottom status."""
+        # Don't validate placeholder text
+        if self.page_entry.get() == self.page_entry_placeholder:
+            return
+
+        page_input = self.page_entry.get().strip()
+
+        # Empty is valid (all pages) - restore original status
+        if not page_input:
+            if self.pdf_path:
+                filename = Path(self.pdf_path).name
+                try:
+                    page_count = get_pdf_page_count(self.pdf_path)
+                    page_info = f" ({page_count} page{'s' if page_count > 1 else ''})"
+                except Exception:
+                    page_info = ""
+                self.status_label.config(
+                    text=f"Ready to convert: {filename}{page_info}",
+                    fg=NORD_COLORS['accent_green']
+                )
+            return
+
+        # Try to parse and validate
+        try:
+            from .page_selector import parse_page_selection
+
+            pages = parse_page_selection(page_input)
+
+            # If we have a PDF selected, validate against page count
+            if self.pdf_path and pages:
+                try:
+                    total_pages = get_pdf_page_count(self.pdf_path)
+                    from .page_selector import validate_page_selection
+
+                    valid_pages = validate_page_selection(pages, total_pages)
+                    filename = Path(self.pdf_path).name
+
+                    # Update status with success message
+                    page_list = ', '.join(map(str, valid_pages))
+                    self.status_label.config(
+                        text=f"Ready to convert: {filename} - Pages: {page_list} ({len(valid_pages)} page{'s' if len(valid_pages) > 1 else ''})",
+                        fg=NORD_COLORS['accent_green']
+                    )
+                except FileValidationError as e:
+                    # Update status with error message
+                    self.status_label.config(
+                        text=f"⚠️ {str(e)}",
+                        fg=NORD_COLORS['accent_red']
+                    )
+            else:
+                # No PDF selected yet, just validate format
+                if pages:
+                    page_list = ', '.join(map(str, pages))
+                    self.status_label.config(
+                        text=f"Page selection valid: {page_list} ({len(pages)} page{'s' if len(pages) > 1 else ''})",
+                        fg=NORD_COLORS['accent_blue']
+                    )
+
+        except FileValidationError as e:
+            # Update status with error message
+            self.status_label.config(
+                text=f"⚠️ Invalid page format: {str(e)}",
+                fg=NORD_COLORS['accent_red']
+            )
+        except Exception:
+            # Generic error - show hint
+            self.status_label.config(
+                text='⚠️ Invalid page format. Use: "1", "1-3", or "1,3,5-7"',
+                fg=NORD_COLORS['accent_yellow']
+            )
 
     def _convert(self) -> None:
         """Start conversion process."""
@@ -514,8 +698,30 @@ class PDFToExcelGUI:
     def _do_conversion(self, pdf_path: str, output_path: str) -> None:
         """Perform the actual conversion (runs in background thread)."""
         try:
-            # Update status
-            self.root.after(0, self._update_status, "🔍 Extracting and processing PDF...", NORD_COLORS['accent_blue'])
+            # Get page selection from entry field (ignore placeholder)
+            page_input = self.page_entry.get().strip()
+            if page_input == self.page_entry_placeholder:
+                page_input = ""
+            selected_pages = None
+
+            if page_input:
+                try:
+                    total_pages = get_pdf_page_count(pdf_path)
+                    selected_pages = parse_page_selection(page_input)
+                    selected_pages = validate_page_selection(selected_pages, total_pages)
+
+                    self.root.after(
+                        0,
+                        self._update_status,
+                        f"🔍 Extracting pages {', '.join(map(str, selected_pages))}...",
+                        NORD_COLORS['accent_blue']
+                    )
+                except FileValidationError as e:
+                    self.root.after(0, self._show_error, "Invalid Page Selection", str(e))
+                    return
+            else:
+                # Update status
+                self.root.after(0, self._update_status, "🔍 Extracting and processing PDF...", NORD_COLORS['accent_blue'])
 
             # Extract with OCR
             ocr_mode = self._get_ocr_mode()
@@ -528,7 +734,7 @@ class PDFToExcelGUI:
             )
 
             # Extract tables (includes OCR, parsing, and post-processing)
-            tables = extractor.extract_tables_from_pdf(pdf_path)
+            tables = extractor.extract_tables_from_pdf(pdf_path, pages=selected_pages)
 
             if not tables or len(tables) == 0:
                 self.root.after(
@@ -567,10 +773,12 @@ class PDFToExcelGUI:
         if converting:
             self.convert_btn.set_state('disabled')
             self.convert_btn.set_text("⏳ Converting...")
+            self.page_entry.config(state='disabled')
             self.progress.start(10)
         else:
             self.convert_btn.set_state('normal')
             self.convert_btn.set_text("✨ Convert to Excel")
+            self.page_entry.config(state='normal')
             self.progress.stop()
 
     def _update_status(self, message: str, color: str = NORD_COLORS['fg']) -> None:

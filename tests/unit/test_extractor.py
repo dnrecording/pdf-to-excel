@@ -4,6 +4,7 @@ import pytest
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 import io
+from unittest.mock import patch, MagicMock
 
 
 @pytest.mark.unit
@@ -181,6 +182,132 @@ Charlie 35     Tokyo"""
         # Assert: Should parse Thai table
         assert table_data is not None
         assert len(table_data) >= 2  # Header + data rows
+
+
+@pytest.mark.unit
+class TestPageSelection:
+    """Tests for page selection functionality in extractor."""
+
+    @patch('pdf_to_excel.extractor.convert_from_path')
+    def test_pdf_to_images_with_pages_parameter(self, mock_convert):
+        """Test pdf_to_images with specific pages."""
+        # Arrange
+        from pdf_to_excel.extractor import OCRExtractor
+
+        mock_images = [MagicMock(), MagicMock(), MagicMock()]
+        mock_convert.return_value = mock_images
+
+        extractor = OCRExtractor()
+
+        # Act: Convert pages 1, 3, 5
+        result = extractor.pdf_to_images("test.pdf", pages=[1, 3, 5])
+
+        # Assert: Should make multiple convert_from_path calls for ranges
+        assert mock_convert.called
+        assert isinstance(result, list)
+
+    @patch('pdf_to_excel.extractor.convert_from_path')
+    def test_pdf_to_images_without_pages_converts_all(self, mock_convert):
+        """Test pdf_to_images without pages parameter converts all pages."""
+        # Arrange
+        from pdf_to_excel.extractor import OCRExtractor
+
+        mock_images = [MagicMock(), MagicMock(), MagicMock()]
+        mock_convert.return_value = mock_images
+
+        extractor = OCRExtractor()
+
+        # Act: No pages specified - should convert all
+        result = extractor.pdf_to_images("test.pdf")
+
+        # Assert: Should call convert_from_path once without page parameters
+        assert mock_convert.call_count == 1
+        call_kwargs = mock_convert.call_args[1]
+        assert 'first_page' not in call_kwargs
+        assert 'last_page' not in call_kwargs
+
+    @patch('pdf_to_excel.extractor.convert_from_path')
+    def test_pdf_to_images_with_contiguous_range(self, mock_convert):
+        """Test pdf_to_images optimizes contiguous page ranges."""
+        # Arrange
+        from pdf_to_excel.extractor import OCRExtractor
+
+        mock_images = [MagicMock(), MagicMock(), MagicMock()]
+        mock_convert.return_value = mock_images
+
+        extractor = OCRExtractor()
+
+        # Act: Pages 1-3 should be one call
+        result = extractor.pdf_to_images("test.pdf", pages=[1, 2, 3])
+
+        # Assert: Should make single call with first_page=1, last_page=3
+        assert mock_convert.call_count == 1
+        call_kwargs = mock_convert.call_args[1]
+        assert call_kwargs['first_page'] == 1
+        assert call_kwargs['last_page'] == 3
+
+    @patch('pdf_to_excel.extractor.convert_from_path')
+    def test_pdf_to_images_with_non_contiguous_pages(self, mock_convert):
+        """Test pdf_to_images with non-contiguous pages."""
+        # Arrange
+        from pdf_to_excel.extractor import OCRExtractor
+
+        mock_images = [MagicMock()]
+        mock_convert.return_value = mock_images
+
+        extractor = OCRExtractor()
+
+        # Act: Pages 1, 5, 10 (non-contiguous)
+        result = extractor.pdf_to_images("test.pdf", pages=[1, 5, 10])
+
+        # Assert: Should make 3 separate calls
+        assert mock_convert.call_count == 3
+
+    @patch('pdf_to_excel.extractor.OCRExtractor.pdf_to_images')
+    @patch('pdf_to_excel.extractor.OCRExtractor.extract_text_from_image')
+    def test_extract_text_from_pdf_with_pages(self, mock_extract_text, mock_pdf_to_images):
+        """Test extract_text_from_pdf with page selection."""
+        # Arrange
+        from pdf_to_excel.extractor import OCRExtractor
+
+        mock_images = [MagicMock(), MagicMock()]
+        mock_pdf_to_images.return_value = mock_images
+        mock_extract_text.side_effect = ["Text from page 1", "Text from page 3"]
+
+        extractor = OCRExtractor()
+
+        # Act: Extract pages 1 and 3
+        result = extractor.extract_text_from_pdf("test.pdf", pages=[1, 3])
+
+        # Assert
+        assert "Page 1" in result
+        assert "Page 3" in result
+        assert "Text from page 1" in result
+        assert "Text from page 3" in result
+        mock_pdf_to_images.assert_called_once_with("test.pdf", pages=[1, 3])
+
+    @patch('pdf_to_excel.extractor.OCRExtractor.extract_text_from_pdf')
+    @patch('pdf_to_excel.extractor.OCRExtractor.parse_table_from_text')
+    @patch('pdf_to_excel.extractor.OCRPostProcessor.clean_table_data')
+    def test_extract_tables_from_pdf_with_pages(self, mock_clean, mock_parse, mock_extract_text):
+        """Test extract_tables_from_pdf with page selection."""
+        # Arrange
+        from pdf_to_excel.extractor import OCRExtractor
+
+        mock_extract_text.return_value = "Table data"
+        mock_table = [["Header"], ["Data"]]
+        mock_parse.return_value = mock_table
+        mock_clean.return_value = mock_table
+
+        extractor = OCRExtractor()
+
+        # Act: Extract from pages 2-4
+        result = extractor.extract_tables_from_pdf("test.pdf", pages=[2, 3, 4])
+
+        # Assert
+        mock_extract_text.assert_called_once_with("test.pdf", pages=[2, 3, 4])
+        assert len(result) == 1
+        assert result[0] == mock_table
 
 
 @pytest.mark.integration

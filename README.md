@@ -98,7 +98,23 @@ python pdf-to-excel.py invoice.pdf result.xlsx --verbose
 
 # English only
 python pdf-to-excel.py doc.pdf output.xlsx --lang eng
+
+# Convert specific pages
+python pdf-to-excel.py input.pdf output.xlsx --pages "1"      # Single page
+python pdf-to-excel.py input.pdf output.xlsx --pages "1-3"    # Page range
+python pdf-to-excel.py input.pdf output.xlsx --pages "1,3,5-7"  # Multiple pages/ranges
 ```
+
+### GUI (Page Selection)
+
+The GUI includes an optional "Pages" field where you can specify which pages to convert:
+
+- **Single page**: Enter `1`
+- **Page range**: Enter `1-3`
+- **Multiple pages/ranges**: Enter `1,3,5-7`
+- **All pages** (default): Leave the field empty
+
+The GUI will show the total page count when you select a PDF file.
 
 ## 💡 Tips for Best Results
 
@@ -134,7 +150,8 @@ make clean     # Remove generated files
 
 ### Test Coverage
 
-- ✅ 40 tests passing
-- 📄 Unit tests for PDF validation, OCR extraction, Excel writing
+- ✅ 103 tests passing
+- 📄 Unit tests for PDF validation, OCR extraction, Excel writing, page selection
 - 🖥️ GUI tests for button behavior, file browsing, state management
 - 🔧 Mock-based testing for UI interactions
+- 📑 Comprehensive page selection parsing and validation tests

@@ -13,6 +13,7 @@ from PyPDF2 import PdfReader
 
 from .exceptions import ExtractionError, FileValidationError
 from .post_processor import OCRPostProcessor
+from .page_selector import get_page_ranges
 
 
 def _get_poppler_path() -> Optional[str]:
@@ -129,7 +130,7 @@ class OCRExtractor:
         self.post_processor = OCRPostProcessor()
 
     def pdf_to_images(
-        self, pdf_path: Union[str, Path], dpi: int = 300
+        self, pdf_path: Union[str, Path], dpi: int = 300, pages: Optional[List[int]] = None
     ) -> List[Image.Image]:
         """
         Convert PDF pages to images.
@@ -137,6 +138,8 @@ class OCRExtractor:
         Args:
             pdf_path: Path to PDF file
             dpi: Resolution for conversion (default: 300 DPI)
+            pages: Optional list of page numbers to convert (1-based).
+                   If None, converts all pages.
 
         Returns:
             List of PIL Image objects
@@ -147,14 +150,43 @@ class OCRExtractor:
 
             print(f"[DEBUG] Using poppler_path: {poppler_path}")
 
-            if poppler_path:
-                print(f"[DEBUG] Calling convert_from_path with poppler_path={poppler_path}")
-                images = convert_from_path(
-                    str(pdf_path), dpi=dpi, fmt="png", poppler_path=poppler_path
-                )
+            # If no specific pages requested, convert all pages
+            if pages is None:
+                if poppler_path:
+                    print(f"[DEBUG] Calling convert_from_path with poppler_path={poppler_path}")
+                    images = convert_from_path(
+                        str(pdf_path), dpi=dpi, fmt="png", poppler_path=poppler_path
+                    )
+                else:
+                    print(f"[DEBUG] Calling convert_from_path without poppler_path (using system PATH)")
+                    images = convert_from_path(str(pdf_path), dpi=dpi, fmt="png")
             else:
-                print(f"[DEBUG] Calling convert_from_path without poppler_path (using system PATH)")
-                images = convert_from_path(str(pdf_path), dpi=dpi, fmt="png")
+                # Convert only selected pages using optimized ranges
+                page_ranges = get_page_ranges(pages)
+                print(f"[DEBUG] Converting page ranges: {page_ranges}")
+
+                all_images = []
+                for first_page, last_page in page_ranges:
+                    if poppler_path:
+                        range_images = convert_from_path(
+                            str(pdf_path),
+                            dpi=dpi,
+                            fmt="png",
+                            first_page=first_page,
+                            last_page=last_page,
+                            poppler_path=poppler_path
+                        )
+                    else:
+                        range_images = convert_from_path(
+                            str(pdf_path),
+                            dpi=dpi,
+                            fmt="png",
+                            first_page=first_page,
+                            last_page=last_page
+                        )
+                    all_images.extend(range_images)
+
+                images = all_images
 
             print(f"[DEBUG] Successfully converted {len(images)} pages")
             return images
@@ -193,22 +225,27 @@ class OCRExtractor:
         except Exception as e:
             raise ExtractionError(f"Failed to extract text from image: {e}")
 
-    def extract_text_from_pdf(self, pdf_path: Union[str, Path]) -> str:
+    def extract_text_from_pdf(self, pdf_path: Union[str, Path], pages: Optional[List[int]] = None) -> str:
         """
         Extract text from scanned PDF using OCR.
 
         Args:
             pdf_path: Path to scanned PDF
+            pages: Optional list of page numbers to extract (1-based).
+                   If None, extracts all pages.
 
         Returns:
-            Extracted text from all pages
+            Extracted text from selected pages
         """
         try:
-            # Convert PDF to images
-            images = self.pdf_to_images(pdf_path)
+            # Convert PDF to images (with page selection)
+            images = self.pdf_to_images(pdf_path, pages=pages)
 
             all_text = []
-            for page_num, image in enumerate(images, 1):
+            # Use actual page numbers if specified, otherwise enumerate from 1
+            page_numbers = pages if pages else list(range(1, len(images) + 1))
+
+            for page_num, image in zip(page_numbers, images):
                 # Extract text from each page
                 page_text = self.extract_text_from_image(image)
                 if page_text:
@@ -257,20 +294,22 @@ class OCRExtractor:
         return table_data if len(table_data) >= 2 else None
 
     def extract_tables_from_pdf(
-        self, pdf_path: Union[str, Path]
+        self, pdf_path: Union[str, Path], pages: Optional[List[int]] = None
     ) -> List[List[List[str]]]:
         """
         Extract all tables from scanned PDF.
 
         Args:
             pdf_path: Path to PDF file
+            pages: Optional list of page numbers to extract (1-based).
+                   If None, extracts all pages.
 
         Returns:
             List of tables (each table is a list of rows)
         """
         try:
-            # Extract all text
-            full_text = self.extract_text_from_pdf(pdf_path)
+            # Extract text from selected pages
+            full_text = self.extract_text_from_pdf(pdf_path, pages=pages)
 
             # Try to parse tables from text
             # For now, treat entire document as one potential table
