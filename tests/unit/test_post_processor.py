@@ -48,6 +48,11 @@ class TestOCRPostProcessor:
         """Test that negative numbers are handled correctly."""
         assert processor.clean_numeric_string("-1,234.56") == "-1,234.56"
         assert processor.clean_numeric_string("~1,234.56") == "-1,234.56"
+
+        # Test suffix minus moved to prefix
+        assert processor.clean_numeric_string("1,234.56-") == "-1,234.56"
+        assert processor.clean_numeric_string("500.00-") == "-500.00"
+        assert processor.clean_numeric_string("812, 399,00-") == "-812,399.00"
         assert processor.clean_numeric_string("~ 1,234.56") == "-1,234.56"  # Removes space after ~
 
     def test_clean_numeric_string_preserves_simple_numbers(self, processor):
@@ -75,6 +80,11 @@ class TestOCRPostProcessor:
         """Test that numeric cleaning is applied to numeric cells."""
         assert processor.clean_cell("812, 399,00") == "812,399.00"
         assert processor.clean_cell("~1,000.00") == "-1,000.00"
+
+        # Test suffix minus conversion
+        assert processor.clean_cell("6,523.36-") == "-6,523.36"
+        assert processor.clean_cell("570.27-") == "-570.27"
+        assert processor.clean_cell("3,000.00-") == "-3,000.00"
 
     def test_clean_cell_preserves_text_cells(self, processor):
         """Test that text cells are not modified."""
