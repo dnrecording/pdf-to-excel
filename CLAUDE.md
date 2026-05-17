@@ -6,14 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 PDF to Excel converter with **Thai/English language support** using **OCR** (Optical Character Recognition). Designed specifically for scanned documents where native PDF text extraction doesn't work.
 
-**Critical Context:** This project was built using **Test-Driven Development (TDD)** with 54 passing tests.
+**Critical Context:** This project was built using **Test-Driven Development (TDD)** with 103 passing tests.
 
 ## Key Commands
 
 ### Development
 ```bash
 make gui       # Launch GUI application (primary interface)
-make test      # Run all 54 tests
+make test      # Run all 103 tests
 make coverage  # Run tests with coverage report
 make format    # Format code with black
 make lint      # Check code style with flake8
@@ -24,6 +24,10 @@ source .venv/bin/activate && pytest tests/unit/test_gui.py::TestPDFToExcelGUI::t
 
 # Run CLI directly
 python pdf-to-excel.py input.pdf output.xlsx --verbose
+
+# Convert specific pages
+python pdf-to-excel.py input.pdf output.xlsx --pages "1-3"
+python pdf-to-excel.py input.pdf output.xlsx --pages "1,3,5-7"
 ```
 
 ### Building Standalone Applications
@@ -64,6 +68,8 @@ PDF → pdf2image → Tesseract OCR → Table Parser → Post-Processor → Exce
 1. **extractor.py** (`OCRExtractor`):
    - Converts PDF pages to images (300 DPI) using pdf2image
    - **Critical:** Explicitly passes poppler_path to convert_from_path when running as bundled app
+   - **Page Selection:** Accepts optional `pages` parameter (list of page numbers, 1-based)
+   - Optimizes conversion by grouping contiguous pages into single pdf2image calls
    - Runs Tesseract OCR with Thai+English
    - Parses table structure from OCR text using regex (splits on 2+ spaces/tabs)
    - **Post-processes** parsed table data using OCRPostProcessor to fix common OCR errors
@@ -91,16 +97,28 @@ PDF → pdf2image → Tesseract OCR → Table Parser → Post-Processor → Exce
    - Tkinter-based Nord dark theme UI
    - Custom `ModernButton` canvas widget with hover effects
    - Drop zone for file selection (click anywhere to browse)
+   - **Page Selection Field:** Optional text entry for specifying pages (e.g., "1", "1-3", "1,3,5-7")
+   - Shows PDF page count when file is selected
+   - Validates page selection before conversion and shows clear error messages
    - Background threading prevents UI freezing during OCR
    - **Debouncing:** `is_browsing` flag prevents multiple concurrent file dialogs
    - Uses `extract_tables_from_pdf()` to ensure post-processing is applied
 
 5. **cli.py**:
-   - Simplified CLI with essential flags: `--lang`, `--verbose`, `--ocr-mode`, `--psm`
+   - Simplified CLI with essential flags: `--lang`, `--verbose`, `--ocr-mode`, `--psm`, `--pages`
+   - **Page Selection:** `--pages "1-3"` or `--pages "1,3,5-7"` to convert specific pages
+   - Shows page count and validates selection before conversion
    - Removed: `--high-quality`, `--no-enhance`, `--no-format` (not needed)
-   - Uses `extract_tables_from_pdf()` to ensure post-processing is applied
 
-6. **exceptions.py**:
+6. **page_selector.py**:
+   - Utility module for page selection parsing and validation
+   - `parse_page_selection()`: Parses user input like "1", "1-3", "1,3,5-7"
+   - `validate_page_selection()`: Validates pages against PDF page count
+   - `get_page_ranges()`: Optimizes consecutive pages into ranges for efficient conversion
+   - `get_pdf_page_count()`: Gets total pages from PDF using PyPDF2
+   - Handles edge cases: reverse ranges, duplicates, out-of-range pages, invalid syntax
+
+7. **exceptions.py**:
    - Exception hierarchy: `PDFToExcelError` → `FileValidationError`, `ExtractionError`, `WriterError`
 
 ### Design Decisions & Lessons Learned
@@ -131,8 +149,16 @@ PDF → pdf2image → Tesseract OCR → Table Parser → Post-Processor → Exce
 - Never bypass post-processing by calling extract/parse methods separately
 - Handles numeric formatting, negative numbers, and decimal separators
 
+**Page Selection Architecture:**
+- **User Input Formats:** Single page ("1"), ranges ("1-3"), multiple ("1,3,5-7")
+- **Optimization:** Groups consecutive pages into single pdf2image calls (e.g., [1,2,3,7,8] → 2 calls instead of 5)
+- **Validation:** Checks pages against PDF page count, filters out-of-range pages
+- **Edge Cases:** Handles reverse ranges (5-1), duplicates, whitespace, negative/zero pages
+- **Backward Compatibility:** `pages=None` (default) converts all pages, maintaining existing behavior
+- **1-based Indexing:** User-facing page numbers are 1-based (matches pdf2image)
+
 **Testing:**
-- 54 tests: 25 GUI tests + 14 post-processor tests + 10 extractor tests + 5 utils tests
+- 103 tests: 34 page selector + 16 extractor tests + 25 GUI tests + 14 post-processor tests + 5 utils tests + 9 others
 - GUI tests use mocks for file dialogs and threading
 - All tkinter widgets created in fixtures must be destroyed in teardown
 
@@ -145,19 +171,21 @@ pdf_to_excel/
 ├── cli.py             # Command-line interface
 ├── extractor.py       # OCR extraction (OCRExtractor class)
 ├── post_processor.py  # OCR post-processing (OCRPostProcessor class)
+├── page_selector.py   # Page selection parsing and validation
 ├── writer.py          # Excel writing (ExcelWriter class)
 ├── gui.py             # GUI app (PDFToExcelGUI, ModernButton)
 ├── utils.py           # PDF validation helpers
 └── exceptions.py      # Custom exception hierarchy
 
 tests/
-├── conftest.py              # Shared fixtures (sample_thai_dataframe)
+├── conftest.py                # Shared fixtures (sample_thai_dataframe)
 ├── unit/
-│   ├── test_utils.py            # 5 tests
-│   ├── test_extractor.py        # 10 tests
-│   ├── test_post_processor.py   # 14 tests
-│   ├── test_writer.py           # (not yet created)
-│   └── test_gui.py              # 25 tests
+│   ├── test_utils.py              # 5 tests
+│   ├── test_extractor.py          # 16 tests (10 original + 6 page selection)
+│   ├── test_page_selector.py      # 34 tests (new)
+│   ├── test_post_processor.py     # 14 tests
+│   ├── test_writer.py             # (not yet created)
+│   └── test_gui.py                # 25 tests
 └── integration/       # (placeholder)
 
 gui_launcher.py        # GUI entry point
@@ -215,6 +243,32 @@ def _browse_file(self):
         file_path = filedialog.askopenfilename(...)
     finally:
         self.is_browsing = False  # Always reset in finally
+```
+
+### Page Selection Usage
+```python
+# CLI: Convert specific pages
+python pdf-to-excel.py input.pdf output.xlsx --pages "1-3"
+python pdf-to-excel.py input.pdf output.xlsx --pages "1,3,5-7"
+
+# Code: Using the extractor with page selection
+from pdf_to_excel.extractor import OCRExtractor
+from pdf_to_excel.page_selector import parse_page_selection, validate_page_selection, get_pdf_page_count
+
+# Parse and validate pages
+total_pages = get_pdf_page_count("input.pdf")
+pages = parse_page_selection("1,3,5-7")  # Returns [1, 3, 5, 6, 7]
+pages = validate_page_selection(pages, total_pages)  # Filters out-of-range
+
+# Extract with page selection
+extractor = OCRExtractor()
+tables = extractor.extract_tables_from_pdf("input.pdf", pages=pages)
+
+# ✅ DO: Always pass pages parameter to extract_tables_from_pdf
+tables = extractor.extract_tables_from_pdf(pdf_path, pages=selected_pages)
+
+# ❌ DON'T: Call extract_text_from_pdf separately (bypasses post-processing)
+text = extractor.extract_text_from_pdf(pdf_path, pages=selected_pages)  # Missing post-processing!
 ```
 
 ## Dependencies
@@ -517,6 +571,7 @@ This project evolved through several iterations:
 9. **Poppler bundling:** Fixed cross-platform PDF conversion issues
 10. **OCR quality improvements:** Switched to tessdata_best for better Thai recognition
 11. **Post-processing:** Added OCRPostProcessor to automatically fix common OCR errors (spaces in numbers, tilde/minus, decimal separators)
-12. **Current:** Production-ready with automated distribution for both macOS and Windows
+12. **Page Selection Feature:** Added ability to convert specific pages via CLI and GUI (49 new tests, bringing total to 103)
+13. **Current:** Production-ready with automated distribution for both macOS and Windows, full page selection support
 
 The `/spec` directory contains original design docs that don't fully match current implementation - refer to actual code as source of truth.

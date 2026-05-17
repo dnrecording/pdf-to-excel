@@ -8,6 +8,7 @@ from .extractor import OCRExtractor, pdf_needs_ocr
 from .utils import validate_pdf_file
 from .writer import ExcelWriter
 from .exceptions import PDFToExcelError
+from .page_selector import parse_page_selection, get_pdf_page_count, validate_page_selection
 
 
 def main() -> int:
@@ -25,6 +26,11 @@ Examples:
   %(prog)s input.pdf output.xlsx
   %(prog)s scanned.pdf result.xlsx --verbose
   %(prog)s thai_invoice.pdf invoice.xlsx --lang tha eng
+
+  # Convert specific pages:
+  %(prog)s input.pdf output.xlsx --pages "1"
+  %(prog)s input.pdf output.xlsx --pages "1-3"
+  %(prog)s input.pdf output.xlsx --pages "1,3,5-7"
 
   # Try different OCR engines for better accuracy:
   %(prog)s low_quality.pdf output.xlsx --ocr-mode 1 --psm 3
@@ -56,6 +62,12 @@ Supported languages: tha (Thai), eng (English)
         help="OCR languages (default: tha eng)",
     )
     parser.add_argument(
+        "--pages",
+        type=str,
+        default=None,
+        help='Page selection: single page "1", range "1-3", or multiple "1,3,5-7" (default: all pages)',
+    )
+    parser.add_argument(
         "-v", "--verbose", action="store_true", help="Verbose output"
     )
     parser.add_argument(
@@ -80,6 +92,19 @@ Supported languages: tha (Thai), eng (English)
         print(f"📄 Input PDF: {args.input_pdf}")
         validate_pdf_file(args.input_pdf)
 
+        # Parse and validate page selection
+        selected_pages = None
+        if args.pages:
+            total_pages = get_pdf_page_count(args.input_pdf)
+            print(f"   → PDF has {total_pages} page(s)")
+
+            selected_pages = parse_page_selection(args.pages)
+            selected_pages = validate_page_selection(selected_pages, total_pages)
+
+            print(f"   → Converting pages: {', '.join(map(str, selected_pages))}")
+        else:
+            print("   → Converting all pages")
+
         # Check PDF type
         if args.verbose:
             print("\n🔍 Detecting PDF type...")
@@ -102,7 +127,7 @@ Supported languages: tha (Thai), eng (English)
 
         # Extract tables (includes OCR, parsing, and post-processing)
         print("📊 Parsing table structure...")
-        tables = extractor.extract_tables_from_pdf(args.input_pdf)
+        tables = extractor.extract_tables_from_pdf(args.input_pdf, pages=selected_pages)
 
         if not tables or len(tables) == 0:
             print("❌ No table structure detected in PDF")
