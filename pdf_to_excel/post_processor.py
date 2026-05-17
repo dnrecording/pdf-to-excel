@@ -21,8 +21,9 @@ class OCRPostProcessor:
         Clean a string that should be a number.
 
         Fixes:
-        - Spaces within numbers: "812, 399,00" → "812,399.00"
+        - Suffix minus to prefix: "1,000-" → "-1,000"
         - Tilde to minus: "~1,000" → "-1,000"
+        - Spaces within numbers: "812, 399,00" → "812,399.00"
         - Decimal separator: ",00" → ".00"
         - Malformed thousand separators
 
@@ -37,6 +38,10 @@ class OCRPostProcessor:
 
         original = text
         text = text.strip()
+
+        # Move - from suffix to prefix for negative numbers
+        if text.endswith('-'):
+            text = '-' + text[:-1].strip()
 
         # Replace ~ with - for negative numbers
         if text.startswith('~'):
@@ -159,9 +164,9 @@ class OCRPostProcessor:
         # If it has digits but no English letters, try to clean numbers within
         if has_digits and not has_english:
             # Extract all number-like patterns and clean them
-            # Pattern: optional ~, then digits with spaces, commas, and periods
+            # Pattern: optional ~ at start, digits with spaces/commas/periods, optional - at end
             # More aggressive pattern to catch numbers with spaces
-            pattern = r'[~]?[\d\s,\.]+\d|[~]?\d+'
+            pattern = r'[~]?[\d\s,\.]+\d-?|[~]?\d+-?'
 
             def clean_match(match):
                 num_str = match.group(0)
